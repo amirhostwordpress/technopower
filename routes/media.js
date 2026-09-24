@@ -106,12 +106,14 @@ function bufferToStream(buffer) {
 }
 
 /**
- * Build the proxy URL for a stored filename.
- * Uses /api/backend/media/file/... so Next.js rewrites it to the Express server.
- * Falls back to /api/media/file/... when accessed directly (e.g. admin panel).
+ * Build the public FTP URL for a stored filename.
+ * Files are served directly from the FTP host — no proxy through the backend.
  */
 function buildProxyUrl(storedName) {
-  return `/api/backend/media/file/${encodeURIComponent(storedName)}`;
+  const publicUrl = normalizePublicUrl(process.env.FTP_PUBLIC_URL || '');
+  // storedName may already be encoded; decode first so we never double-encode
+  const clean = decodeURIComponent(storedName);
+  return `${publicUrl}/${clean}`;
 }
 
 // ─── PROXY: stream a file from FTP directly to the browser ───────────────────
@@ -268,25 +270,28 @@ router.post('/upload', (req, res) => {
   });
 });
 
-// ─── Fix existing records with broken external URLs ───────────────────────────
-// POST /api/media/fix-urls  →  rewrites all file_path values to proxy URLs
+// ─── Fix existing records with broken/proxy URLs ─────────────────────────────
+// POST /api/media/fix-urls  →  rewrites all file_path values to direct FTP URLs
 router.post('/fix-urls', async (req, res) => {
   try {
     const [rows] = await pool.execute(
       "SELECT id, stored_name FROM ftp_files WHERE stored_name IS NOT NULL AND stored_name != ''"
     );
 
+    const config = await getFTPSettings();
+
     let updated = 0;
     for (const row of rows) {
-      const proxyUrl = buildProxyUrl(row.stored_name);
-      await pool.execute('UPDATE ftp_files SET file_path = ? WHERE id = ?', [proxyUrl, row.id]);
+      const clean = decodeURIComponent(row.stored_name);
+      const ftpUrl = `${config.publicUrl}/${clean}`;
+      await pool.execute('UPDATE ftp_files SET file_path = ? WHERE id = ?', [ftpUrl, row.id]);
       updated++;
     }
 
     return res.status(200).json({
       success: true,
       updated,
-      message: `${updated} record(s) updated to proxy URLs.`
+      message: `${updated} record(s) updated to direct FTP URLs.`
     });
   } catch (err) {
     console.error('fix-urls error:', err);
