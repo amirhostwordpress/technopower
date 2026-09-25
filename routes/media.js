@@ -106,14 +106,22 @@ function bufferToStream(buffer) {
 }
 
 /**
- * Build the public FTP URL for a stored filename.
- * Files are served directly from the FTP host — no proxy through the backend.
+ * Build the public URL for a stored filename.
+ * If publicUrl is configured, files are served directly from the FTP host.
+ * If publicUrl is empty, use the built-in streaming proxy at /api/media/file/:filename
+ * (this matches the Admin → Settings UI hint).
  */
-function buildProxyUrl(storedName) {
-  const publicUrl = normalizePublicUrl(process.env.FTP_PUBLIC_URL || '');
+function buildProxyUrl(storedName, publicUrl) {
+  const normalizedPublic = normalizePublicUrl(publicUrl || process.env.FTP_PUBLIC_URL || '');
   // storedName may already be encoded; decode first so we never double-encode
   const clean = decodeURIComponent(storedName);
-  return `${publicUrl}/${clean}`;
+  if (normalizedPublic) {
+    return `${normalizedPublic}/${clean}`;
+  }
+  // No direct public URL → fall back to backend FTP streaming proxy
+  // (the proxy endpoint reads the DB row by stored_name, so use encoded form for URL safety)
+  const encoded = encodeURIComponent(storedName);
+  return `/api/media/file/${encoded}`;
 }
 
 // ─── PROXY: stream a file from FTP directly to the browser ───────────────────
@@ -243,7 +251,7 @@ router.post('/upload', (req, res) => {
       await client.close();
       client = null;
 
-      const proxyUrl = buildProxyUrl(remoteFilename);
+      const proxyUrl = buildProxyUrl(remoteFilename, config.publicUrl);
 
       const [insertResult] = await pool.execute(
         `INSERT INTO ftp_files (original_name, stored_name, file_path, file_size, file_type)
@@ -271,7 +279,7 @@ router.post('/upload', (req, res) => {
 });
 
 // ─── Fix existing records with broken/proxy URLs ─────────────────────────────
-// POST /api/media/fix-urls  →  rewrites all file_path values to direct FTP URLs
+// POST /api/media/fix-urls  →  rewrites all file_path values consistently
 router.post('/fix-urls', async (req, res) => {
   try {
     const [rows] = await pool.execute(
@@ -282,16 +290,18 @@ router.post('/fix-urls', async (req, res) => {
 
     let updated = 0;
     for (const row of rows) {
-      const clean = decodeURIComponent(row.stored_name);
-      const ftpUrl = `${config.publicUrl}/${clean}`;
-      await pool.execute('UPDATE ftp_files SET file_path = ? WHERE id = ?', [ftpUrl, row.id]);
+      const properUrl = buildProxyUrl(row.stored_name, config.publicUrl);
+      await pool.execute('UPDATE ftp_files SET file_path = ? WHERE id = ?', [properUrl, row.id]);
       updated++;
     }
 
+    const usingProxy = !normalizePublicUrl(config.publicUrl);
     return res.status(200).json({
       success: true,
       updated,
-      message: `${updated} record(s) updated to direct FTP URLs.`
+      message: usingProxy
+        ? `${updated} record(s) updated to use the built-in FTP streaming proxy (/api/media/file/...).`
+        : `${updated} record(s) updated to direct FTP URLs (${config.publicUrl}).`
     });
   } catch (err) {
     console.error('fix-urls error:', err);

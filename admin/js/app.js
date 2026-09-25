@@ -122,8 +122,17 @@ function hideModal() {
 
 function imagePickerInput(initialUrl, onSelectCallback) {
   const safeUrl = escapeHtml(initialUrl || '');
+  const hasInitial = !!safeUrl;
   const html = `<div class="img-picker">
-    <img class="image-preview" src="${safeUrl}" onerror="this.style.display='none'" style="max-width:100%;max-height:140px;border:1px solid var(--line);border-radius:4px;margin-bottom:8px;">
+    <div style="position:relative;width:100%;max-height:140px;margin-bottom:8px;">
+      <img class="image-preview" src="${safeUrl}" style="width:100%;max-height:140px;object-fit:cover;border:1px solid var(--line);border-radius:4px;display:${hasInitial ? 'block' : 'none'};">
+      <div class="img-preview-fallback" style="width:100%;height:140px;${hasInitial ? 'display:none;' : 'display:grid;'}place-items:center;background:var(--navy2);border:1px dashed var(--line);border-radius:4px;font-size:28px;color:var(--mist);">
+        <span style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <span>🖼️</span>
+          <small style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;">No Image</small>
+        </span>
+      </div>
+    </div>
     <input type="hidden" class="img-url-input" value="${safeUrl}">
     <button type="button" class="btn btn-secondary pick-btn"><i>📤</i> Upload</button>
     <button type="button" class="icon-btn browse-btn" title="Browse library">🗂️</button>
@@ -139,6 +148,37 @@ function imagePickerInput(initialUrl, onSelectCallback) {
       const browseBtn = picker.querySelector('.browse-btn');
       const hiddenInput = picker.querySelector('.img-url-input');
       const preview = picker.querySelector('.image-preview');
+      const fallback = picker.querySelector('.img-preview-fallback');
+
+      function showImage(url) {
+        if (!url) {
+          preview.removeAttribute('src');
+          preview.style.display = 'none';
+          if (fallback) fallback.style.display = 'grid';
+          return;
+        }
+        preview.onerror = () => {
+          preview.style.display = 'none';
+          if (fallback) fallback.style.display = 'grid';
+        };
+        preview.onload = () => {
+          preview.style.display = 'block';
+          if (fallback) fallback.style.display = 'none';
+        };
+        preview.src = url;
+      }
+
+      if (hasInitial) {
+        preview.onerror = () => {
+          preview.style.display = 'none';
+          if (fallback) fallback.style.display = 'grid';
+        };
+        preview.onload = () => {
+          preview.style.display = 'block';
+          if (fallback) fallback.style.display = 'none';
+        };
+      }
+
       pickBtn.addEventListener('click', () => fileInput.click());
       fileInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
@@ -148,8 +188,7 @@ function imagePickerInput(initialUrl, onSelectCallback) {
           const url = (res && (res.url || res.path || (res.data && (res.data.url || res.data.path)))) || '';
           if (url) {
             hiddenInput.value = url;
-            preview.src = url;
-            preview.style.display = '';
+            showImage(url);
             toast('Uploaded successfully', 'success');
             if (onSelectCallback) onSelectCallback(url);
           } else {
@@ -168,9 +207,16 @@ function imagePickerInput(initialUrl, onSelectCallback) {
             const murl = m.url || m.file_path || m.path || '';
             const mtype = m.type || m.file_type || '';
             const mname = m.name || m.original_name || murl;
-            const thumb = mtype === 'image' || mtype.startsWith('image/') || (murl && /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(murl))
-              ? `<img src="${escapeHtml(murl)}" style="width:100%;height:90px;object-fit:cover;border-radius:4px;" onerror="this.outerHTML='<div style=\\'width:100%;height:90px;display:grid;place-items:center;background:var(--navy2);border-radius:4px;font-size:24px;\\'>🖼️</div>'">`
-              : `<div style="width:100%;height:90px;display:grid;place-items:center;background:var(--navy2);border-radius:4px;font-size:28px;">${mtype === 'video' || mtype.startsWith('video/') ? '🎬' : mname.endsWith('.pdf') || mtype.includes('pdf') ? '📕' : '📄'}</div>`;
+            const isImage = mtype === 'image' || mtype.startsWith('image/') || (murl && /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(murl));
+            let thumb;
+            if (isImage) {
+              thumb = `<div style="position:relative;width:100%;height:90px;">
+                <img src="${escapeHtml(murl)}" style="width:100%;height:90px;object-fit:cover;border-radius:4px;display:block;" class="lib-thumb">
+                <div class="lib-thumb-fallback" style="position:absolute;inset:0;display:none;place-items:center;background:var(--navy2);border-radius:4px;font-size:24px;">🖼️</div>
+              </div>`;
+            } else {
+              thumb = `<div style="width:100%;height:90px;display:grid;place-items:center;background:var(--navy2);border-radius:4px;font-size:28px;">${mtype === 'video' || mtype.startsWith('video/') ? '🎬' : mname.endsWith('.pdf') || mtype.includes('pdf') ? '📕' : '📄'}</div>`;
+            }
             return `<div class="media-lib-item" data-url="${escapeHtml(murl)}" style="cursor:pointer;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--navy2);">
               ${thumb}
               <div style="font-size:11px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mist);">${escapeHtml(mname)}</div>
@@ -181,13 +227,19 @@ function imagePickerInput(initialUrl, onSelectCallback) {
               ${grid || '<div style="grid-column:1/-1;padding:30px;text-align:center;color:var(--mist);">No media items found.</div>'}
             </div>
           `, `<button class="btn btn-secondary" id="lib-cancel">Close</button>`);
+          $$('#modal-body .lib-thumb').forEach(img => {
+            img.onerror = () => {
+              img.style.display = 'none';
+              const fb = img.parentElement.querySelector('.lib-thumb-fallback');
+              if (fb) fb.style.display = 'grid';
+            };
+          });
           $('#lib-cancel').addEventListener('click', hideModal);
           $$('.media-lib-item').forEach(el => {
             el.addEventListener('click', () => {
               const u = el.getAttribute('data-url');
               hiddenInput.value = u;
-              preview.src = u;
-              preview.style.display = '';
+              showImage(u);
               hideModal();
               toast('Selected from library', 'success');
               if (onSelectCallback) onSelectCallback(u);
@@ -1965,8 +2017,10 @@ AdminApp.registerRoute('media-library', {
               const url = f.url || f.file_path || f.path || '';
               const fname = f.name || f.original_name || url;
               const thumb = t === 'image'
-                ? `<img src="${escapeHtml(url)}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';" style="width:100%;height:140px;object-fit:cover;border-radius:6px 6px 0 0;">
-                   <div style="display:none;position:absolute;inset:0 0 auto 0;height:140px;place-items:center;background:var(--navy2);font-size:36px;border-radius:6px 6px 0 0;">🖼️</div>`
+                ? `<div style="position:relative;width:100%;height:140px;">
+                    <img class="ml-card-img" src="${escapeHtml(url)}" style="width:100%;height:140px;object-fit:cover;border-radius:6px 6px 0 0;display:block;">
+                    <div class="ml-card-fb" style="position:absolute;top:0;left:0;width:100%;height:140px;display:none;place-items:center;background:var(--navy2);font-size:36px;border-radius:6px 6px 0 0;">🖼️</div>
+                   </div>`
                 : `<div style="height:140px;display:grid;place-items:center;background:var(--navy2);font-size:40px;border-radius:6px 6px 0 0;">${t === 'video' ? '🎬' : t === 'pdf' ? '📕' : '📄'}</div>`;
               return `
                 <div class="media-card" data-id="${f.id || ''}" data-url="${escapeHtml(url)}">
@@ -2016,6 +2070,18 @@ AdminApp.registerRoute('media-library', {
           showModal('Preview', content, `<button class="btn btn-secondary" id="pv-close">Close</button>`);
           $('#pv-close').onclick = hideModal;
         };
+        const cardImg = card.querySelector('.ml-card-img');
+        const cardFb = card.querySelector('.ml-card-fb');
+        if (cardImg) {
+          cardImg.onerror = () => {
+            cardImg.style.display = 'none';
+            if (cardFb) cardFb.style.display = 'grid';
+          };
+          cardImg.onload = () => {
+            cardImg.style.display = 'block';
+            if (cardFb) cardFb.style.display = 'none';
+          };
+        }
       });
       const upl = document.getElementById('ml-upload');
       if (upl && !upl.dataset.bound) {

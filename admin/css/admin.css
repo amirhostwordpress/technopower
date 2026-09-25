@@ -470,6 +470,18 @@ tr:hover td {
   color: var(--success);
 }
 
+.badge-ok,
+.status-ok {
+  background: rgba(53, 160, 123, 0.15);
+  color: var(--success);
+}
+
+.badge-err,
+.status-err {
+  background: rgba(224, 83, 83, 0.15);
+  color: var(--danger);
+}
+
 .tile-nav {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
