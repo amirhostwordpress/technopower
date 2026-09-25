@@ -71,6 +71,29 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+ * Normalize any media URL coming from DB columns.
+ *   • Empty → stays empty (let placeholder handle it)
+ *   • http(s)://…   → already a full URL, pass through
+ *   • /api/media/file/… → already proxy format, pass through
+ *   • /filename.ext  → LEGACY broken format from old buildProxyUrl bug
+ *   • filename.ext   → bare stored_name (also legacy/broken)
+ *       → rewrite to /api/media/file/:encoded (backend streaming proxy)
+ * This guarantees previews work in Hero / Companies / Products / etc.
+ * forms even when the content DB rows still contain old buggy URLs.
+ * ───────────────────────────────────────────────────────────────────── */
+function normalizeMediaUrl(urlLike) {
+  if (!urlLike || typeof urlLike !== 'string') return '';
+  const s = urlLike.trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.indexOf('/api/media/file/') === 0) return s;
+  // strip any single leading '/' leftover from the legacy "/filename.jpg" bug
+  const bare = s.charAt(0) === '/' ? s.slice(1) : s;
+  if (!bare) return '';
+  return '/api/media/file/' + encodeURIComponent(bare);
+}
+
 function toast(msg, type = 'info') {
   const container = document.getElementById('toast-container');
   if (!container) return;
@@ -121,8 +144,9 @@ function hideModal() {
 }
 
 function imagePickerInput(initialUrl, onSelectCallback) {
-  const safeUrl = escapeHtml(initialUrl || '');
-  const hasInitial = !!safeUrl;
+  const initialNorm = normalizeMediaUrl(initialUrl || '');
+  const safeUrl = escapeHtml(initialNorm);
+  const hasInitial = !!initialNorm;
   const html = `<div class="img-picker">
     <div style="position:relative;width:100%;max-height:140px;margin-bottom:8px;">
       <img class="image-preview" src="${safeUrl}" style="width:100%;max-height:140px;object-fit:cover;border:1px solid var(--line);border-radius:4px;display:${hasInitial ? 'block' : 'none'};">
@@ -133,7 +157,7 @@ function imagePickerInput(initialUrl, onSelectCallback) {
         </span>
       </div>
     </div>
-    <input type="hidden" class="img-url-input" value="${safeUrl}">
+    <input type="hidden" class="img-url-input" value="${escapeHtml(initialUrl || '')}">
     <button type="button" class="btn btn-secondary pick-btn"><i>📤</i> Upload</button>
     <button type="button" class="icon-btn browse-btn" title="Browse library">🗂️</button>
     <input type="file" accept="image/*,video/*,.pdf" class="img-file" hidden>
@@ -151,7 +175,8 @@ function imagePickerInput(initialUrl, onSelectCallback) {
       const fallback = picker.querySelector('.img-preview-fallback');
 
       function showImage(url) {
-        if (!url) {
+        const normalized = normalizeMediaUrl(url);
+        if (!normalized) {
           preview.removeAttribute('src');
           preview.style.display = 'none';
           if (fallback) fallback.style.display = 'grid';
@@ -165,7 +190,7 @@ function imagePickerInput(initialUrl, onSelectCallback) {
           preview.style.display = 'block';
           if (fallback) fallback.style.display = 'none';
         };
-        preview.src = url;
+        preview.src = normalized;
       }
 
       if (hasInitial) {
@@ -177,6 +202,15 @@ function imagePickerInput(initialUrl, onSelectCallback) {
           preview.style.display = 'block';
           if (fallback) fallback.style.display = 'none';
         };
+        if (preview.complete) {
+          if (preview.naturalWidth === 0) {
+            preview.style.display = 'none';
+            if (fallback) fallback.style.display = 'grid';
+          } else {
+            preview.style.display = 'block';
+            if (fallback) fallback.style.display = 'none';
+          }
+        }
       }
 
       pickBtn.addEventListener('click', () => fileInput.click());
@@ -204,9 +238,10 @@ function imagePickerInput(initialUrl, onSelectCallback) {
           const media = await apiGet('/media?limit=200');
           const items = (media && (media.items || media.data || (Array.isArray(media) ? media : []))) || [];
           const grid = items.map(m => {
-            const murl = m.url || m.file_path || m.path || '';
+            const rawUrl = m.url || m.file_path || m.path || '';
+            const murl = normalizeMediaUrl(rawUrl);
             const mtype = m.type || m.file_type || '';
-            const mname = m.name || m.original_name || murl;
+            const mname = m.name || m.original_name || rawUrl;
             const isImage = mtype === 'image' || mtype.startsWith('image/') || (murl && /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(murl));
             let thumb;
             if (isImage) {
@@ -217,7 +252,7 @@ function imagePickerInput(initialUrl, onSelectCallback) {
             } else {
               thumb = `<div style="width:100%;height:90px;display:grid;place-items:center;background:var(--navy2);border-radius:4px;font-size:28px;">${mtype === 'video' || mtype.startsWith('video/') ? '🎬' : mname.endsWith('.pdf') || mtype.includes('pdf') ? '📕' : '📄'}</div>`;
             }
-            return `<div class="media-lib-item" data-url="${escapeHtml(murl)}" style="cursor:pointer;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--navy2);">
+            return `<div class="media-lib-item" data-url="${escapeHtml(rawUrl)}" style="cursor:pointer;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--navy2);">
               ${thumb}
               <div style="font-size:11px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mist);">${escapeHtml(mname)}</div>
             </div>`;
@@ -228,11 +263,24 @@ function imagePickerInput(initialUrl, onSelectCallback) {
             </div>
           `, `<button class="btn btn-secondary" id="lib-cancel">Close</button>`);
           $$('#modal-body .lib-thumb').forEach(img => {
+            const fb = img.parentElement.querySelector('.lib-thumb-fallback');
             img.onerror = () => {
               img.style.display = 'none';
-              const fb = img.parentElement.querySelector('.lib-thumb-fallback');
               if (fb) fb.style.display = 'grid';
             };
+            img.onload = () => {
+              img.style.display = 'block';
+              if (fb) fb.style.display = 'none';
+            };
+            if (img.complete) {
+              if (img.naturalWidth === 0) {
+                img.style.display = 'none';
+                if (fb) fb.style.display = 'grid';
+              } else {
+                img.style.display = 'block';
+                if (fb) fb.style.display = 'none';
+              }
+            }
           });
           $('#lib-cancel').addEventListener('click', hideModal);
           $$('.media-lib-item').forEach(el => {
@@ -2014,8 +2062,9 @@ AdminApp.registerRoute('media-library', {
           <div class="media-grid">
             ${list.map(f => {
               const t = typeOf(f);
-              const url = f.url || f.file_path || f.path || '';
-              const fname = f.name || f.original_name || url;
+              const rawUrl = f.url || f.file_path || f.path || '';
+              const url = normalizeMediaUrl(rawUrl);
+              const fname = f.name || f.original_name || rawUrl;
               const thumb = t === 'image'
                 ? `<div style="position:relative;width:100%;height:140px;">
                     <img class="ml-card-img" src="${escapeHtml(url)}" style="width:100%;height:140px;object-fit:cover;border-radius:6px 6px 0 0;display:block;">
@@ -2023,7 +2072,7 @@ AdminApp.registerRoute('media-library', {
                    </div>`
                 : `<div style="height:140px;display:grid;place-items:center;background:var(--navy2);font-size:40px;border-radius:6px 6px 0 0;">${t === 'video' ? '🎬' : t === 'pdf' ? '📕' : '📄'}</div>`;
               return `
-                <div class="media-card" data-id="${f.id || ''}" data-url="${escapeHtml(url)}">
+                <div class="media-card" data-id="${f.id || ''}" data-url="${escapeHtml(rawUrl)}">
                   <button class="icon-btn ml-del" title="Delete" style="position:absolute;top:6px;right:6px;color:var(--danger);background:rgba(0,0,0,.6);border-color:rgba(255,255,255,.15);">✕</button>
                   <div style="position:relative;cursor:pointer;" class="ml-preview">${thumb}</div>
                   <div class="media-info">
@@ -2062,11 +2111,12 @@ AdminApp.registerRoute('media-library', {
         };
         card.querySelector('.ml-preview').onclick = () => {
           const t = typeOf(list.find(x => (x.id == id) || ((x.url || x.file_path) === url)) || {});
+          const pUrl = normalizeMediaUrl(url);
           const content = t === 'image'
-            ? `<img src="${escapeHtml(url)}" style="max-width:100%;max-height:60vh;border-radius:6px;">`
+            ? `<img src="${escapeHtml(pUrl)}" style="max-width:100%;max-height:60vh;border-radius:6px;">`
             : t === 'video'
-            ? `<video controls src="${escapeHtml(url)}" style="max-width:100%;max-height:60vh;border-radius:6px;"></video>`
-            : `<iframe src="${escapeHtml(url)}" style="width:100%;height:70vh;border:1px solid var(--line);border-radius:6px;"></iframe>`;
+            ? `<video controls src="${escapeHtml(pUrl)}" style="max-width:100%;max-height:60vh;border-radius:6px;"></video>`
+            : `<iframe src="${escapeHtml(pUrl)}" style="width:100%;height:70vh;border:1px solid var(--line);border-radius:6px;"></iframe>`;
           showModal('Preview', content, `<button class="btn btn-secondary" id="pv-close">Close</button>`);
           $('#pv-close').onclick = hideModal;
         };
@@ -2081,6 +2131,15 @@ AdminApp.registerRoute('media-library', {
             cardImg.style.display = 'block';
             if (cardFb) cardFb.style.display = 'none';
           };
+          if (cardImg.complete) {
+            if (cardImg.naturalWidth === 0) {
+              cardImg.style.display = 'none';
+              if (cardFb) cardFb.style.display = 'grid';
+            } else {
+              cardImg.style.display = 'block';
+              if (cardFb) cardFb.style.display = 'none';
+            }
+          }
         }
       });
       const upl = document.getElementById('ml-upload');
@@ -2342,9 +2401,10 @@ AdminApp.registerRoute('products', {
       return products.map((p, i) => `
         <div class="list-item prod-row" data-id="${p.id || ''}">
           <div class="item-no">${String(i + 1).padStart(2, '0')}</div>
-          <div style="width:60px;height:46px;flex-shrink:0;border-radius:4px;overflow:hidden;background:var(--navy2);display:flex;align-items:center;justify-content:center;">
+          <div style="width:60px;height:46px;flex-shrink:0;border-radius:4px;overflow:hidden;background:var(--navy2);position:relative;display:flex;align-items:center;justify-content:center;">
             ${p.image_url
-              ? `<img src="${escapeHtml(p.image_url)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">`
+              ? `<img class="prod-thumb-img" src="${escapeHtml(normalizeMediaUrl(p.image_url))}" style="width:100%;height:100%;object-fit:cover;display:block;">
+                 <div class="prod-thumb-fb" style="position:absolute;inset:0;display:none;place-items:center;background:var(--navy2);font-size:22px;">📦</div>`
               : `<span style="font-size:22px;">📦</span>`}
           </div>
           <div class="item-main" style="flex:1;min-width:0;">
@@ -2460,6 +2520,28 @@ AdminApp.registerRoute('products', {
       $$('.prod-row').forEach(row => {
         const id = row.getAttribute('data-id');
         const p = products.find(x => String(x.id) === String(id)) || {};
+
+        const thumbImg = row.querySelector('.prod-thumb-img');
+        const thumbFb = row.querySelector('.prod-thumb-fb');
+        if (thumbImg && thumbFb) {
+          thumbImg.onerror = () => {
+            thumbImg.style.display = 'none';
+            thumbFb.style.display = 'grid';
+          };
+          thumbImg.onload = () => {
+            thumbImg.style.display = 'block';
+            thumbFb.style.display = 'none';
+          };
+          if (thumbImg.complete) {
+            if (thumbImg.naturalWidth === 0) {
+              thumbImg.style.display = 'none';
+              thumbFb.style.display = 'grid';
+            } else {
+              thumbImg.style.display = 'block';
+              thumbFb.style.display = 'none';
+            }
+          }
+        }
 
         row.querySelector('.prod-edit').onclick = () => openForm(p);
 

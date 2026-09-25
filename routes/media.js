@@ -130,7 +130,10 @@ router.get('/file/:filename', async (req, res) => {
   let client = null;
 
   try {
-    const filename       = decodeURIComponent(req.params.filename);
+    // Express already URL-decodes req.params, so do NOT decode again
+    // (a second decodeURIComponent would corrupt names containing literal '%')
+    const rawFilename    = String(req.params.filename || '');
+    const filename       = /%[0-9A-Fa-f]{2}/.test(rawFilename) ? decodeURIComponent(rawFilename) : rawFilename;
     const remoteFilename = getRemoteFilename(filename);
 
     // Look up mime type from DB
@@ -146,19 +149,19 @@ router.get('/file/:filename', async (req, res) => {
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Cache-Control', 'public, max-age=86400');
 
-    // Stream FTP → PassThrough → response (no temp file on disk)
-    const pass = new PassThrough();
-    pass.pipe(res);
-
-    await client.downloadTo(pass, remoteFilename);
-    pass.end(); // signal end-of-stream so the HTTP response is finalised
+    // Stream FTP → HTTP response directly (no intermediate PassThrough)
+    await client.downloadTo(res, remoteFilename);
     await client.close();
     client = null;
+    res.end();
   } catch (err) {
     if (client) { try { await client.close(); } catch (_) {} }
     console.error('Media proxy error:', err.message);
     if (!res.headersSent) {
       res.status(404).json({ error: 'NotFound', message: err.message });
+    } else {
+      // Headers already gone — best-effort close so browser doesn't hang
+      try { res.end(); } catch (_) {}
     }
   }
 });
@@ -346,15 +349,22 @@ router.get('/', async (req, res) => {
       dataParams
     );
 
+    // Always build URLs from stored_name using the CURRENT config
+    // (so if admin changes Public URL setting, previews work immediately
+    //  and legacy broken file_path values in the DB don't show broken images)
+    const config = await getFTPSettings();
+
     const normalizedData = data.map(row => {
       const rawType      = row.file_type || '';
       const friendlyType = rawType.startsWith('image') ? 'image'
         : rawType.startsWith('video') ? 'video'
         : rawType.includes('pdf')     ? 'pdf'
         : rawType;
+      const freshUrl = row.stored_name ? buildProxyUrl(row.stored_name, config.publicUrl) : (row.file_path || '');
       return {
         ...row,
-        url:  row.file_path,
+        file_path: freshUrl,
+        url:  freshUrl,
         name: row.original_name,
         type: friendlyType,
         size: row.file_size
