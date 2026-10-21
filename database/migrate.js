@@ -232,6 +232,28 @@ const tables = [
     sort_order INT DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS portfolio_projects (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(500) NOT NULL,
+    category VARCHAR(255) DEFAULT '',
+    image_url VARCHAR(1000) DEFAULT '',
+    is_active TINYINT DEFAULT 1,
+    sort_order INT DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS portfolio_gallery (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    portfolio_project_id INT NOT NULL,
+    image_url VARCHAR(1000) NOT NULL,
+    caption VARCHAR(500) DEFAULT '',
+    sort_order INT DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_portfolio_gallery_project (portfolio_project_id),
+    FOREIGN KEY (portfolio_project_id) REFERENCES portfolio_projects(id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
 ];
 

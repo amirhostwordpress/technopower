@@ -2081,4 +2081,320 @@ router.put('/seo', async (req, res) => {
   }
 });
 
+// ============================================================
+// PORTFOLIO PROJECTS
+// ============================================================
+
+router.get('/portfolio', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT * FROM portfolio_projects ORDER BY sort_order ASC, id ASC'
+    );
+    res.status(200).json({ data: rows });
+  } catch (err) {
+    console.error('Error fetching portfolio projects:', err);
+    res.status(500).json({ error: 'InternalServerError', message: 'Failed to fetch portfolio projects.' });
+  }
+});
+
+router.post('/portfolio', async (req, res) => {
+  try {
+    const { name, category = '', image_url = '', is_active = 1, sort_order = 0 } = req.body;
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'ValidationError', message: 'name is required.' });
+    }
+    const [result] = await pool.execute(
+      'INSERT INTO portfolio_projects (name, category, image_url, is_active, sort_order) VALUES (?, ?, ?, ?, ?)',
+      [String(name).trim(), String(category), String(image_url), is_active ? 1 : 0, Number(sort_order) || 0]
+    );
+    const [rows] = await pool.execute('SELECT * FROM portfolio_projects WHERE id = ?', [result.insertId]);
+    res.status(201).json({ data: rows[0] });
+  } catch (err) {
+    console.error('Error creating portfolio project:', err);
+    res.status(500).json({ error: 'InternalServerError', message: 'Failed to create portfolio project.' });
+  }
+});
+
+router.put('/portfolio/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [existing] = await pool.execute('SELECT * FROM portfolio_projects WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'NotFound', message: 'Portfolio project not found.' });
+    }
+    const ex = existing[0];
+    const name      = req.body.name      !== undefined ? String(req.body.name).trim()  : ex.name;
+    const category  = req.body.category  !== undefined ? String(req.body.category)     : ex.category;
+    const image_url = req.body.image_url !== undefined ? String(req.body.image_url)    : ex.image_url;
+    const is_active = req.body.is_active !== undefined ? (req.body.is_active ? 1 : 0)  : ex.is_active;
+    const sort_order= req.body.sort_order!== undefined ? Number(req.body.sort_order)   : ex.sort_order;
+
+    if (!name) return res.status(400).json({ error: 'ValidationError', message: 'name is required.' });
+
+    await pool.execute(
+      'UPDATE portfolio_projects SET name=?, category=?, image_url=?, is_active=?, sort_order=? WHERE id=?',
+      [name, category, image_url, is_active, sort_order, id]
+    );
+    const [rows] = await pool.execute('SELECT * FROM portfolio_projects WHERE id = ?', [id]);
+    res.status(200).json({ data: rows[0] });
+  } catch (err) {
+    console.error('Error updating portfolio project:', err);
+    res.status(500).json({ error: 'InternalServerError', message: 'Failed to update portfolio project.' });
+  }
+});
+
+router.delete('/portfolio/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [existing] = await pool.execute('SELECT * FROM portfolio_projects WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'NotFound', message: 'Portfolio project not found.' });
+    }
+    await pool.execute('DELETE FROM portfolio_projects WHERE id = ?', [id]);
+    res.status(200).json({ message: 'Portfolio project deleted.', deletedId: parseInt(id, 10) });
+  } catch (err) {
+    console.error('Error deleting portfolio project:', err);
+    res.status(500).json({ error: 'InternalServerError', message: 'Failed to delete portfolio project.' });
+  }
+});
+
+router.post('/portfolio/reorder', async (req, res) => {
+  try {
+    const { order } = req.body;
+    if (!Array.isArray(order)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'order must be an array of IDs.' });
+    }
+    for (let i = 0; i < order.length; i++) {
+      await pool.execute('UPDATE portfolio_projects SET sort_order=? WHERE id=?', [i, order[i]]);
+    }
+    const [rows] = await pool.execute('SELECT * FROM portfolio_projects ORDER BY sort_order ASC, id ASC');
+    res.status(200).json({ data: rows });
+  } catch (err) {
+    console.error('Error reordering portfolio projects:', err);
+    res.status(500).json({ error: 'InternalServerError', message: 'Failed to reorder portfolio projects.' });
+  }
+});
+
+// ============================================================
+// PORTFOLIO PROJECTS — aliases at /portfolio-projects/*
+// (Admin panel calls this path)
+// ============================================================
+
+router.get('/portfolio-projects', async (req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT * FROM portfolio_projects ORDER BY sort_order ASC, id ASC');
+    res.status(200).json({ data: rows });
+  } catch (err) {
+    console.error('Error fetching portfolio projects (alias):', err);
+    res.status(500).json({ error: 'InternalServerError', message: err.message });
+  }
+});
+
+router.post('/portfolio-projects/reorder', async (req, res) => {
+  try {
+    const { order } = req.body;
+    if (!Array.isArray(order)) return res.status(400).json({ error: 'ValidationError', message: 'order must be an array of IDs.' });
+    for (let i = 0; i < order.length; i++) {
+      await pool.execute('UPDATE portfolio_projects SET sort_order=? WHERE id=?', [i, order[i]]);
+    }
+    const [rows] = await pool.execute('SELECT * FROM portfolio_projects ORDER BY sort_order ASC, id ASC');
+    res.status(200).json({ data: rows });
+  } catch (err) {
+    console.error('Error reordering portfolio projects (alias):', err);
+    res.status(500).json({ error: 'InternalServerError', message: err.message });
+  }
+});
+
+router.post('/portfolio-projects', async (req, res) => {
+  try {
+    const { name, category = '', image_url = '', is_active = 1, sort_order = 0 } = req.body;
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'ValidationError', message: 'name is required.' });
+    const [result] = await pool.execute(
+      'INSERT INTO portfolio_projects (name, category, image_url, is_active, sort_order) VALUES (?, ?, ?, ?, ?)',
+      [String(name).trim(), String(category), String(image_url), is_active ? 1 : 0, Number(sort_order) || 0]
+    );
+    const [rows] = await pool.execute('SELECT * FROM portfolio_projects WHERE id = ?', [result.insertId]);
+    res.status(201).json({ data: rows[0] });
+  } catch (err) {
+    console.error('Error creating portfolio project (alias):', err);
+    res.status(500).json({ error: 'InternalServerError', message: err.message });
+  }
+});
+
+router.put('/portfolio-projects/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [existing] = await pool.execute('SELECT * FROM portfolio_projects WHERE id = ?', [id]);
+    if (!existing.length) return res.status(404).json({ error: 'NotFound', message: 'Portfolio project not found.' });
+    const ex = existing[0];
+    const name       = req.body.name      !== undefined ? String(req.body.name).trim()     : ex.name;
+    const category   = req.body.category  !== undefined ? String(req.body.category)        : ex.category;
+    const image_url  = req.body.image_url !== undefined ? String(req.body.image_url)       : ex.image_url;
+    const is_active  = req.body.is_active !== undefined ? (req.body.is_active ? 1 : 0)    : ex.is_active;
+    const sort_order = req.body.sort_order !== undefined ? Number(req.body.sort_order)     : ex.sort_order;
+    if (!name) return res.status(400).json({ error: 'ValidationError', message: 'name is required.' });
+    await pool.execute(
+      'UPDATE portfolio_projects SET name=?, category=?, image_url=?, is_active=?, sort_order=? WHERE id=?',
+      [name, category, image_url, is_active, sort_order, id]
+    );
+    const [rows] = await pool.execute('SELECT * FROM portfolio_projects WHERE id = ?', [id]);
+    res.status(200).json({ data: rows[0] });
+  } catch (err) {
+    console.error('Error updating portfolio project (alias):', err);
+    res.status(500).json({ error: 'InternalServerError', message: err.message });
+  }
+});
+
+router.delete('/portfolio-projects/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [existing] = await pool.execute('SELECT * FROM portfolio_projects WHERE id = ?', [id]);
+    if (!existing.length) return res.status(404).json({ error: 'NotFound', message: 'Portfolio project not found.' });
+    await pool.execute('DELETE FROM portfolio_projects WHERE id = ?', [id]);
+    res.status(200).json({ message: 'Portfolio project deleted.', deletedId: parseInt(id, 10) });
+  } catch (err) {
+    console.error('Error deleting portfolio project (alias):', err);
+    res.status(500).json({ error: 'InternalServerError', message: err.message });
+  }
+});
+
+// ============================================================
+// PORTFOLIO GALLERY
+// Sub-resource: /portfolio/:id/gallery  (and alias /portfolio-projects/:id/gallery)
+// Table: portfolio_gallery
+// Columns: id, portfolio_project_id, image_url, caption, sort_order
+// ============================================================
+
+async function requireProject(id, res) {
+  const [rows] = await pool.execute('SELECT id FROM portfolio_projects WHERE id = ?', [id]);
+  if (!rows.length) {
+    res.status(404).json({ error: 'NotFound', message: 'Portfolio project not found.' });
+    return false;
+  }
+  return true;
+}
+
+// GET all gallery images for a project
+async function getGallery(req, res) {
+  try {
+    const { id } = req.params;
+    if (!(await requireProject(id, res))) return;
+    const [rows] = await pool.execute(
+      'SELECT * FROM portfolio_gallery WHERE portfolio_project_id = ? ORDER BY sort_order ASC, id ASC',
+      [id]
+    );
+    res.status(200).json({ data: rows });
+  } catch (err) {
+    console.error('Error fetching portfolio gallery:', err);
+    res.status(500).json({ error: 'InternalServerError', message: err.message });
+  }
+}
+
+// POST add a gallery image
+async function addGalleryImage(req, res) {
+  try {
+    const { id } = req.params;
+    if (!(await requireProject(id, res))) return;
+    const { image_url, caption = '', sort_order = 0 } = req.body;
+    if (!image_url || !String(image_url).trim()) {
+      return res.status(400).json({ error: 'ValidationError', message: 'image_url is required.' });
+    }
+    const [result] = await pool.execute(
+      'INSERT INTO portfolio_gallery (portfolio_project_id, image_url, caption, sort_order) VALUES (?, ?, ?, ?)',
+      [id, String(image_url).trim(), String(caption), Number(sort_order) || 0]
+    );
+    const [rows] = await pool.execute('SELECT * FROM portfolio_gallery WHERE id = ?', [result.insertId]);
+    res.status(201).json({ data: rows[0] });
+  } catch (err) {
+    console.error('Error adding portfolio gallery image:', err);
+    res.status(500).json({ error: 'InternalServerError', message: err.message });
+  }
+}
+
+// PUT update a gallery image
+async function updateGalleryImage(req, res) {
+  try {
+    const { id, gid } = req.params;
+    if (!(await requireProject(id, res))) return;
+    const [existing] = await pool.execute(
+      'SELECT * FROM portfolio_gallery WHERE id = ? AND portfolio_project_id = ?', [gid, id]
+    );
+    if (!existing.length) {
+      return res.status(404).json({ error: 'NotFound', message: 'Gallery image not found.' });
+    }
+    const ex = existing[0];
+    const image_url  = req.body.image_url  !== undefined ? String(req.body.image_url).trim()  : ex.image_url;
+    const caption    = req.body.caption    !== undefined ? String(req.body.caption)            : ex.caption;
+    const sort_order = req.body.sort_order !== undefined ? Number(req.body.sort_order)         : ex.sort_order;
+    if (!image_url) return res.status(400).json({ error: 'ValidationError', message: 'image_url is required.' });
+    await pool.execute(
+      'UPDATE portfolio_gallery SET image_url=?, caption=?, sort_order=? WHERE id=?',
+      [image_url, caption, sort_order, gid]
+    );
+    const [rows] = await pool.execute('SELECT * FROM portfolio_gallery WHERE id = ?', [gid]);
+    res.status(200).json({ data: rows[0] });
+  } catch (err) {
+    console.error('Error updating portfolio gallery image:', err);
+    res.status(500).json({ error: 'InternalServerError', message: err.message });
+  }
+}
+
+// DELETE a gallery image
+async function deleteGalleryImage(req, res) {
+  try {
+    const { id, gid } = req.params;
+    if (!(await requireProject(id, res))) return;
+    const [existing] = await pool.execute(
+      'SELECT id FROM portfolio_gallery WHERE id = ? AND portfolio_project_id = ?', [gid, id]
+    );
+    if (!existing.length) {
+      return res.status(404).json({ error: 'NotFound', message: 'Gallery image not found.' });
+    }
+    await pool.execute('DELETE FROM portfolio_gallery WHERE id = ?', [gid]);
+    res.status(200).json({ message: 'Gallery image deleted.', deletedId: parseInt(gid, 10) });
+  } catch (err) {
+    console.error('Error deleting portfolio gallery image:', err);
+    res.status(500).json({ error: 'InternalServerError', message: err.message });
+  }
+}
+
+// POST reorder gallery images
+async function reorderGallery(req, res) {
+  try {
+    const { id } = req.params;
+    if (!(await requireProject(id, res))) return;
+    const { order } = req.body;
+    if (!Array.isArray(order)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'order must be an array of IDs.' });
+    }
+    for (let i = 0; i < order.length; i++) {
+      await pool.execute(
+        'UPDATE portfolio_gallery SET sort_order=? WHERE id=? AND portfolio_project_id=?',
+        [i, order[i], id]
+      );
+    }
+    const [rows] = await pool.execute(
+      'SELECT * FROM portfolio_gallery WHERE portfolio_project_id = ? ORDER BY sort_order ASC, id ASC', [id]
+    );
+    res.status(200).json({ data: rows });
+  } catch (err) {
+    console.error('Error reordering portfolio gallery:', err);
+    res.status(500).json({ error: 'InternalServerError', message: err.message });
+  }
+}
+
+// Register under both path aliases
+// NOTE: more-specific routes (with /reorder suffix) MUST be before the generic POST /:id/gallery
+router.get('/portfolio/:id/gallery',                 getGallery);
+router.post('/portfolio/:id/gallery/reorder',        reorderGallery);
+router.post('/portfolio/:id/gallery',                addGalleryImage);
+router.put('/portfolio/:id/gallery/:gid',            updateGalleryImage);
+router.delete('/portfolio/:id/gallery/:gid',         deleteGalleryImage);
+
+router.get('/portfolio-projects/:id/gallery',            getGallery);
+router.post('/portfolio-projects/:id/gallery/reorder',   reorderGallery);
+router.post('/portfolio-projects/:id/gallery',           addGalleryImage);
+router.put('/portfolio-projects/:id/gallery/:gid',       updateGalleryImage);
+router.delete('/portfolio-projects/:id/gallery/:gid',    deleteGalleryImage);
+
 module.exports = router;

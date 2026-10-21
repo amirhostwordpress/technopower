@@ -42,7 +42,8 @@ router.get('/site', async (req, res) => {
       distReqRows,
       contactRows,
       siteSettingsRows,
-      productRows
+      productRows,
+      portfolioRows
     ] = await Promise.all([
       pool.execute('SELECT * FROM seo_settings WHERE id=1').then(r => r[0]),
       pool.execute('SELECT * FROM nav_links ORDER BY sort_order ASC').then(r => r[0]),
@@ -63,7 +64,8 @@ router.get('/site', async (req, res) => {
       pool.execute('SELECT * FROM distribution_requirements ORDER BY sort_order ASC').then(r => r[0]),
       pool.execute('SELECT * FROM contact_section WHERE id=1').then(r => r[0]),
       pool.execute('SELECT meta_key, meta_value FROM site_settings').then(r => r[0]),
-      pool.execute('SELECT * FROM products WHERE is_active = 1 ORDER BY sort_order ASC, id ASC').then(r => r[0])
+      pool.execute('SELECT * FROM products WHERE is_active = 1 ORDER BY sort_order ASC, id ASC').then(r => r[0]),
+      pool.execute('SELECT * FROM portfolio_projects WHERE is_active = 1 ORDER BY sort_order ASC, id ASC').then(r => r[0])
     ]);
 
     const divisions = { building: null, technical: null };
@@ -109,6 +111,16 @@ router.get('/site', async (req, res) => {
     const contact = contactRows[0] || null;
     const products = productRows;
 
+    // Attach gallery images to each portfolio project
+    const portfolioProjects = portfolioRows;
+    for (const project of portfolioProjects) {
+      const [galleryRows] = await pool.execute(
+        'SELECT id, image_url, caption, sort_order FROM portfolio_gallery WHERE portfolio_project_id = ? ORDER BY sort_order ASC, id ASC',
+        [project.id]
+      );
+      project.gallery = galleryRows;
+    }
+
     const ftpPublicUrl = getSiteSetting(siteSettingsRows, 'ftp_public_url', process.env.FTP_PUBLIC_URL || '');
     const enrichedFilms = films.map(f => ({
       ...f,
@@ -138,7 +150,8 @@ router.get('/site', async (req, res) => {
       distribution,
       distributionRequirements,
       contact,
-      products
+      products,
+      portfolioProjects
     });
   } catch (err) {
     console.error('Public site content error:', err);

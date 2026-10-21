@@ -454,6 +454,7 @@ AdminApp.registerRoute('dashboard', {
       ['techbolt', '⚡', 'TECHBOLT', 'Product page', 'var(--orange)'],
       ['media-proof', '🏆', 'Media/Proof', 'Awards & testimonials', 'var(--gold)'],
       ['distribution', '🚚', 'Distribution', 'Network & regions', 'var(--success)'],
+      ['portfolio', '🖼️', 'Portfolio', 'Project showcase', 'var(--orange)'],
       ['contact', '📧', 'Contact', 'Contact & footer', 'var(--blue)'],
       ['navigation', '🧭', 'Navigation', 'Menu links', 'var(--slate2)'],
       ['enquiries', '✉️', 'Enquiries', (newCnt ? newCnt + ' new' : 'No new msgs'), 'var(--danger)'],
@@ -2563,6 +2564,177 @@ AdminApp.registerRoute('products', {
       });
 
       document.getElementById('prod-add') && (document.getElementById('prod-add').onclick = () => openForm(null));
+    }
+
+    renderPage();
+  }
+});
+
+AdminApp.registerRoute('portfolio', {
+  title: 'Portfolio',
+  subtitle: 'Project images shown before the Contact section',
+  render: async function(container) {
+    const res = await apiGet('/content/portfolio').catch(() => ({ data: [] }));
+    let projects = Array.isArray(res) ? res : (res.data || []);
+
+    function renderList() {
+      if (!projects.length) {
+        return '<p style="color:var(--mist);padding:24px 0;">No projects yet. Click "+ Add Project" to create one.</p>';
+      }
+      return projects.map((p, i) => `
+        <div class="list-item portfolio-row" data-id="${p.id || ''}">
+          <div class="item-no">${String(i + 1).padStart(2, '0')}</div>
+          <div style="width:72px;height:52px;flex-shrink:0;border-radius:4px;overflow:hidden;background:var(--navy2);display:flex;align-items:center;justify-content:center;">
+            ${p.image_url
+              ? `<img src="${escapeHtml(normalizeMediaUrl(p.image_url))}" style="width:100%;height:100%;object-fit:cover;display:block;"
+                   onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
+                 <div style="display:none;place-items:center;font-size:20px;">🏗</div>`
+              : `<span style="font-size:20px;">🏗</span>`}
+          </div>
+          <div class="item-main" style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(p.name || '')}</div>
+            <div style="color:var(--mist);font-size:12px;letter-spacing:.07em;text-transform:uppercase;">${escapeHtml(p.category || '')}</div>
+          </div>
+          <div style="flex-shrink:0;">
+            <span style="font-size:11px;padding:3px 8px;border-radius:10px;background:${p.is_active ? 'rgba(46,167,113,.18)' : 'rgba(224,83,83,.18)'};color:${p.is_active ? 'var(--success)' : 'var(--danger)'};">
+              ${p.is_active ? 'Active' : 'Hidden'}
+            </span>
+          </div>
+          <div class="list-actions">
+            <button class="icon-btn pf-up" title="Move up" ${i === 0 ? 'disabled style="opacity:.3;"' : ''}>↑</button>
+            <button class="icon-btn pf-dn" title="Move down" ${i === projects.length - 1 ? 'disabled style="opacity:.3;"' : ''}>↓</button>
+            <button class="icon-btn pf-edit" title="Edit">✏️</button>
+            <button class="icon-btn pf-del" title="Delete" style="color:var(--danger);">🗑</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderPage() {
+      container.innerHTML = `
+        <div class="card">
+          <div class="flex-between mb-16">
+            <h3>Portfolio Projects (${projects.length})</h3>
+            <button class="btn btn-gold" id="pf-add">+ Add Project</button>
+          </div>
+          <div id="pf-list">${renderList()}</div>
+        </div>
+      `;
+      bindList();
+    }
+
+    function openForm(project) {
+      const isNew = !project || !project.id;
+      const p = project || {};
+      showModal(
+        isNew ? 'Add Project' : 'Edit Project',
+        `<div style="display:grid;gap:14px;">
+          <div>
+            <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--mist);text-transform:uppercase;letter-spacing:.06em;">Project Name *</label>
+            <input id="pfm-name" type="text" value="${escapeHtml(p.name || '')}" placeholder="e.g. Mass Excavation — Residential Tower, Dubai"
+              style="width:100%;padding:10px 12px;background:var(--navy2);border:1px solid var(--line);border-radius:4px;color:var(--paper);font-size:14px;">
+          </div>
+          <div>
+            <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--mist);text-transform:uppercase;letter-spacing:.06em;">Category</label>
+            <input id="pfm-cat" type="text" value="${escapeHtml(p.category || '')}" placeholder="e.g. BUILDING CONTRACTING"
+              style="width:100%;padding:10px 12px;background:var(--navy2);border:1px solid var(--line);border-radius:4px;color:var(--paper);font-size:14px;">
+          </div>
+          <div>
+            <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--mist);text-transform:uppercase;letter-spacing:.06em;">Project Image</label>
+            ${imagePickerInput(p.image_url || '')}
+          </div>
+          <div class="grid-2" style="gap:12px;">
+            <div>
+              <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--mist);text-transform:uppercase;letter-spacing:.06em;">Sort Order</label>
+              <input id="pfm-order" type="number" value="${p.sort_order !== undefined ? p.sort_order : projects.length}"
+                style="width:100%;padding:10px 12px;background:var(--navy2);border:1px solid var(--line);border-radius:4px;color:var(--paper);font-size:14px;">
+            </div>
+            <div style="display:flex;align-items:flex-end;padding-bottom:2px;">
+              <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;">
+                <input id="pfm-active" type="checkbox" ${p.is_active !== 0 ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;">
+                <span>Active (visible on site)</span>
+              </label>
+            </div>
+          </div>
+        </div>`,
+        `<button class="btn btn-secondary" id="pfm-cancel">Cancel</button>
+         <button class="btn btn-gold" id="pfm-save">${isNew ? 'Add Project' : 'Save Changes'}</button>`
+      );
+
+      $('#pfm-cancel').onclick = hideModal;
+
+      $('#pfm-save').onclick = async () => {
+        const name = $('#pfm-name').value.trim();
+        if (!name) { toast('Project name is required', 'error'); return; }
+
+        const payload = {
+          name,
+          category: $('#pfm-cat').value.trim(),
+          image_url: document.querySelector('#modal-body .img-url-input')?.value || p.image_url || '',
+          sort_order: parseInt($('#pfm-order').value, 10) || 0,
+          is_active: $('#pfm-active').checked ? 1 : 0
+        };
+
+        try {
+          if (isNew) {
+            const created = await apiPost('/content/portfolio', payload);
+            projects.push(created.data || created);
+            toast('Project added', 'success');
+          } else {
+            const updated = await apiPut('/content/portfolio/' + p.id, payload);
+            const idx = projects.findIndex(x => x.id == p.id);
+            if (idx >= 0) projects[idx] = updated.data || updated;
+            toast('Project saved', 'success');
+          }
+          hideModal();
+          renderPage();
+        } catch (err) {
+          toast('Save failed: ' + err.message, 'error');
+        }
+      };
+    }
+
+    function bindList() {
+      $$('.portfolio-row').forEach((row, i) => {
+        const id = row.getAttribute('data-id');
+        const p = projects.find(x => String(x.id) === String(id)) || projects[i] || {};
+
+        row.querySelector('.pf-up').onclick = async () => {
+          if (i === 0) return;
+          [projects[i - 1], projects[i]] = [projects[i], projects[i - 1]];
+          try {
+            await apiPost('/content/portfolio/reorder', { order: projects.map(x => x.id) });
+          } catch (_) {}
+          renderPage();
+        };
+
+        row.querySelector('.pf-dn').onclick = async () => {
+          if (i === projects.length - 1) return;
+          [projects[i + 1], projects[i]] = [projects[i], projects[i + 1]];
+          try {
+            await apiPost('/content/portfolio/reorder', { order: projects.map(x => x.id) });
+          } catch (_) {}
+          renderPage();
+        };
+
+        row.querySelector('.pf-edit').onclick = () => openForm(p);
+
+        row.querySelector('.pf-del').onclick = async () => {
+          const ok = await confirmDialog(`Delete "${p.name}"?`);
+          if (!ok) return;
+          try {
+            await apiDel('/content/portfolio/' + id);
+            projects = projects.filter(x => String(x.id) !== String(id));
+            toast('Project deleted', 'success');
+            renderPage();
+          } catch (err) {
+            toast('Delete failed: ' + err.message, 'error');
+          }
+        };
+      });
+
+      const addBtn = document.getElementById('pf-add');
+      if (addBtn) addBtn.onclick = () => openForm(null);
     }
 
     renderPage();

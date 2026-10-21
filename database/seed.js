@@ -305,7 +305,7 @@ async function seed() {
         'Contracting projects, technical support, TECHBOLT application reviews and international distribution.',
         'info@techpoweruae.com',
         'Tech Power Group · United Arab Emirates',
-        '© 2026 Tech Power Group'
+        '© 2018 Tech Power Group'
       ]
     );
     console.log('contact_section seeded.');
@@ -315,7 +315,8 @@ async function seed() {
       [2, 'Companies', '#companies', 1],
       [3, 'TECHBOLT', '#techbolt', 2],
       [4, 'Distribution', '#distribution', 3],
-      [5, 'Contact', '#contact', 4]
+      [5, 'Portfolio', '#portfolio', 4],
+      [6, 'Contact', '#contact', 5]
     ];
     for (const n of navLinks) {
       await pool.execute(
@@ -330,7 +331,7 @@ async function seed() {
        VALUES (?, ?, ?)`,
       [
         1,
-        'Tech Power Group — Dynamic Industrial Website',
+        'Tech Power Group — Technical Service',
         'Tech Power Group — contracting, technical services, engineering technologies and TECHBOLT pile breaking systems from the UAE.'
       ]
     );
@@ -356,8 +357,25 @@ async function seed() {
     }
     console.log('products seeded.');
 
+    const portfolioProjects = [
+      [1, 'Bulk Earthworks — Mixed-Use Podium, Abu Dhabi',      'BUILDING CONTRACTING', 'assets/hero-earthworks-full-hd.webp',      1, 0],
+      [2, 'Mass Excavation — Residential Tower, Dubai',          'BUILDING CONTRACTING', 'assets/hero-earthworks-full-hd.webp',      1, 1],
+      [3, 'MEP Installation — Industrial Facility, Sharjah',     'TECHNICAL SERVICES',   'assets/technical-services-full-hd.webp',  1, 2],
+      [4, 'HVAC Upgrade — Commercial Complex, Abu Dhabi',        'TECHNICAL SERVICES',   'assets/technical-services-full-hd.webp',  1, 3],
+      [5, 'TECHBOLT Pile Breaking — Infrastructure Package',     'TECHNOLOGIES',         'assets/techbolt-module-hd.webp',          1, 4],
+      [6, 'Substructure Works — Mixed-Use Development, Dubai',   'BUILDING CONTRACTING', 'assets/hero-earthworks-full-hd.webp',      1, 5],
+    ];
+    for (const p of portfolioProjects) {
+      await pool.execute(
+        `REPLACE INTO portfolio_projects (id, name, category, image_url, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?)`,
+        p
+      );
+    }
+    console.log('portfolio_projects seeded.');
+
     console.log('Seed completed successfully.');
     process.exit(0);
+  } catch (err) {
     console.error('Seed failed:', err);
     process.exit(1);
   }
