@@ -254,6 +254,21 @@ const tables = [
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_portfolio_gallery_project (portfolio_project_id),
     FOREIGN KEY (portfolio_project_id) REFERENCES portfolio_projects(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS blog_posts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(500) NOT NULL,
+    slug VARCHAR(255) UNIQUE,
+    excerpt TEXT,
+    body TEXT,
+    image_url VARCHAR(1000) DEFAULT '',
+    category VARCHAR(255) DEFAULT 'News',
+    published_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    is_active TINYINT DEFAULT 1,
+    sort_order INT DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
 ];
 
@@ -350,6 +365,36 @@ async function runMigrations() {
       await pool.execute(insert.sql, insert.values);
     }
     console.log('Default placeholder inserts completed.');
+
+    try {
+      const [existingBlog] = await pool.execute(
+        "SELECT id FROM nav_links WHERE LOWER(label) = 'blog' OR href LIKE '%blog%' LIMIT 1"
+      );
+      if (existingBlog.length === 0) {
+        const [contactRows] = await pool.execute(
+          "SELECT id, sort_order FROM nav_links WHERE LOWER(label) = 'contact' OR href LIKE '%contact%' ORDER BY sort_order ASC LIMIT 1"
+        );
+        if (contactRows.length > 0) {
+          const contactOrder = Number(contactRows[0].sort_order) || 0;
+          await pool.execute(
+            'UPDATE nav_links SET sort_order = sort_order + 1 WHERE sort_order >= ?',
+            [contactOrder]
+          );
+          await pool.execute(
+            'INSERT INTO nav_links (label, href, sort_order) VALUES (?, ?, ?)',
+            ['Blog', '/blog', contactOrder]
+          );
+        } else {
+          await pool.execute(
+            'INSERT INTO nav_links (label, href, sort_order) VALUES (?, ?, ?)',
+            ['Blog', '/blog', 99]
+          );
+        }
+        console.log('Blog nav link inserted before Contact.');
+      }
+    } catch (navErr) {
+      console.warn('Could not insert Blog nav link:', navErr.message);
+    }
 
     console.log('Migration completed successfully.');
     process.exit(0);

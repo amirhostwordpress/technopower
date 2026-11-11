@@ -2397,4 +2397,126 @@ router.post('/portfolio-projects/:id/gallery',           addGalleryImage);
 router.put('/portfolio-projects/:id/gallery/:gid',       updateGalleryImage);
 router.delete('/portfolio-projects/:id/gallery/:gid',    deleteGalleryImage);
 
+// ============================================================
+// BLOG POSTS
+// ============================================================
+
+function slugifyTitle(value) {
+  const base = String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return base || 'post';
+}
+
+async function uniqueBlogSlug(base, excludeId) {
+  let slug = base;
+  let n = 2;
+  while (true) {
+    const sql = excludeId
+      ? 'SELECT id FROM blog_posts WHERE slug = ? AND id != ? LIMIT 1'
+      : 'SELECT id FROM blog_posts WHERE slug = ? LIMIT 1';
+    const params = excludeId ? [slug, excludeId] : [slug];
+    const [rows] = await pool.execute(sql, params);
+    if (rows.length === 0) return slug;
+    slug = `${base}-${n++}`;
+  }
+}
+
+router.get('/blog', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT * FROM blog_posts ORDER BY sort_order ASC, published_at DESC, id DESC'
+    );
+    res.status(200).json({ data: rows });
+  } catch (err) {
+    console.error('Error fetching blog posts:', err);
+    res.status(500).json({ error: 'InternalServerError', message: 'Failed to fetch blog posts.' });
+  }
+});
+
+router.post('/blog', async (req, res) => {
+  try {
+    const title = req.body.title !== undefined ? String(req.body.title) : '';
+    const excerpt = req.body.excerpt !== undefined ? req.body.excerpt : '';
+    const body = req.body.body !== undefined ? req.body.body : '';
+    const image_url = req.body.image_url !== undefined ? req.body.image_url : '';
+    const category = req.body.category !== undefined ? req.body.category : 'News';
+    const is_active = req.body.is_active !== undefined ? (req.body.is_active ? 1 : 0) : 1;
+    const sort_order = req.body.sort_order !== undefined ? req.body.sort_order : 0;
+    const published_at = req.body.published_at || new Date();
+
+    if (!title.trim()) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Title is required.' });
+    }
+
+    const slug = await uniqueBlogSlug(slugifyTitle(req.body.slug || title));
+
+    const [result] = await pool.execute(
+      `INSERT INTO blog_posts (title, slug, excerpt, body, image_url, category, published_at, is_active, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [title, slug, excerpt, body, image_url, category, published_at, is_active, sort_order]
+    );
+
+    const [rows] = await pool.execute('SELECT * FROM blog_posts WHERE id = ?', [result.insertId]);
+    res.status(201).json({ data: rows[0] });
+  } catch (err) {
+    console.error('Error creating blog post:', err);
+    res.status(500).json({ error: 'InternalServerError', message: 'Failed to create blog post.' });
+  }
+});
+
+router.put('/blog/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [existing] = await pool.execute('SELECT * FROM blog_posts WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'NotFound', message: 'Blog post not found.' });
+    }
+    const ex = existing[0];
+
+    const title = req.body.title !== undefined ? req.body.title : ex.title;
+    const excerpt = req.body.excerpt !== undefined ? req.body.excerpt : ex.excerpt;
+    const body = req.body.body !== undefined ? req.body.body : ex.body;
+    const image_url = req.body.image_url !== undefined ? req.body.image_url : ex.image_url;
+    const category = req.body.category !== undefined ? req.body.category : ex.category;
+    const is_active = req.body.is_active !== undefined ? (req.body.is_active ? 1 : 0) : ex.is_active;
+    const sort_order = req.body.sort_order !== undefined ? req.body.sort_order : ex.sort_order;
+    const published_at = req.body.published_at !== undefined ? req.body.published_at : ex.published_at;
+    const slug = await uniqueBlogSlug(
+      slugifyTitle(req.body.slug || title || ex.slug),
+      id
+    );
+
+    await pool.execute(
+      `UPDATE blog_posts SET title = ?, slug = ?, excerpt = ?, body = ?, image_url = ?,
+       category = ?, published_at = ?, is_active = ?, sort_order = ?, updated_at = NOW() WHERE id = ?`,
+      [title, slug, excerpt, body, image_url, category, published_at, is_active, sort_order, id]
+    );
+
+    const [rows] = await pool.execute('SELECT * FROM blog_posts WHERE id = ?', [id]);
+    res.status(200).json({ data: rows[0] });
+  } catch (err) {
+    console.error('Error updating blog post:', err);
+    res.status(500).json({ error: 'InternalServerError', message: 'Failed to update blog post.' });
+  }
+});
+
+router.delete('/blog/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [existing] = await pool.execute('SELECT * FROM blog_posts WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'NotFound', message: 'Blog post not found.' });
+    }
+    await pool.execute('DELETE FROM blog_posts WHERE id = ?', [id]);
+    res.status(200).json({ message: 'Blog post deleted.', deletedId: parseInt(id, 10) });
+  } catch (err) {
+    console.error('Error deleting blog post:', err);
+    res.status(500).json({ error: 'InternalServerError', message: 'Failed to delete blog post.' });
+  }
+});
+
 module.exports = router;

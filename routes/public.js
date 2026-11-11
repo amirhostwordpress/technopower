@@ -43,7 +43,8 @@ router.get('/site', async (req, res) => {
       contactRows,
       siteSettingsRows,
       productRows,
-      portfolioRows
+      portfolioRows,
+      blogRows
     ] = await Promise.all([
       pool.execute('SELECT * FROM seo_settings WHERE id=1').then(r => r[0]),
       pool.execute('SELECT * FROM nav_links ORDER BY sort_order ASC').then(r => r[0]),
@@ -65,7 +66,8 @@ router.get('/site', async (req, res) => {
       pool.execute('SELECT * FROM contact_section WHERE id=1').then(r => r[0]),
       pool.execute('SELECT meta_key, meta_value FROM site_settings').then(r => r[0]),
       pool.execute('SELECT * FROM products WHERE is_active = 1 ORDER BY sort_order ASC, id ASC').then(r => r[0]),
-      pool.execute('SELECT * FROM portfolio_projects WHERE is_active = 1 ORDER BY sort_order ASC, id ASC').then(r => r[0])
+      pool.execute('SELECT * FROM portfolio_projects WHERE is_active = 1 ORDER BY sort_order ASC, id ASC').then(r => r[0]),
+      pool.execute('SELECT * FROM blog_posts WHERE is_active = 1 ORDER BY published_at DESC, sort_order ASC, id DESC').then(r => r[0]).catch(() => [])
     ]);
 
     const divisions = { building: null, technical: null };
@@ -151,7 +153,8 @@ router.get('/site', async (req, res) => {
       distributionRequirements,
       contact,
       products,
-      portfolioProjects
+      portfolioProjects,
+      blogPosts: blogRows || []
     });
   } catch (err) {
     console.error('Public site content error:', err);

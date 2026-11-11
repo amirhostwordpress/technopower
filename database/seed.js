@@ -316,7 +316,8 @@ async function seed() {
       [3, 'TECHBOLT', '#techbolt', 2],
       [4, 'Distribution', '#distribution', 3],
       [5, 'Portfolio', '#portfolio', 4],
-      [6, 'Contact', '#contact', 5]
+      [6, 'Blog', '/blog', 5],
+      [7, 'Contact', '#contact', 6]
     ];
     for (const n of navLinks) {
       await pool.execute(
@@ -372,6 +373,39 @@ async function seed() {
       );
     }
     console.log('portfolio_projects seeded.');
+
+    const blogPosts = [
+      [
+        1,
+        'Built for the work ahead',
+        'built-for-the-work-ahead',
+        'How Tech Power Group brings contracting, technical services and TECHBOLT together on Gulf sites.',
+        'Tech Power Group is built around a simple idea: one accountable route from site execution to engineered solutions.\n\nOur building contracting teams handle earthworks, civil works and enabling packages. Technical services cover specialist installation, maintenance and project support. Technologies designs, manufactures and supports the equipment that makes that work safer and faster.\n\nTECHBOLT sits at the centre of that offer — a modular hydraulic pile-breaking system specified against pile diameter and carrier, then supported through the life of the programme.',
+        'assets/hero-earthworks-full-hd.webp',
+        'Group',
+        1,
+        0
+      ],
+      [
+        2,
+        'Why modular pile breaking matters',
+        'why-modular-pile-breaking-matters',
+        'Controlled hydraulic force, less vibration, and a cleaner pile-head finish than conventional cropping.',
+        'Conventional pile cropping is slow, noisy and hard on the cage. TECHBOLT uses a modular ring of hydraulic chisels so force is applied evenly around the pile head.\n\nLinks are added or removed to suit the reviewed diameter. Working pressure of up to 320 bar delivers a controlled break with a 190 mm chisel travel, which helps keep the remaining concrete and reinforcement in a condition that follow-on trades can work with.\n\nThe result on site is less manual breaking, a shorter programme window, and a safer method for high-volume pile-head removal.',
+        'assets/techbolt-module-hd.webp',
+        'TECHBOLT',
+        1,
+        1
+      ]
+    ];
+    for (const p of blogPosts) {
+      await pool.execute(
+        `REPLACE INTO blog_posts (id, title, slug, excerpt, body, image_url, category, is_active, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        p
+      );
+    }
+    console.log('blog_posts seeded.');
 
     console.log('Seed completed successfully.');
     process.exit(0);
