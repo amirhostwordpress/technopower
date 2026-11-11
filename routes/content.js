@@ -2443,6 +2443,8 @@ router.post('/blog', async (req, res) => {
     const excerpt = req.body.excerpt !== undefined ? req.body.excerpt : '';
     const body = req.body.body !== undefined ? req.body.body : '';
     const image_url = req.body.image_url !== undefined ? req.body.image_url : '';
+    const pdf_url = req.body.pdf_url !== undefined ? req.body.pdf_url : '';
+    const pdf_name = req.body.pdf_name !== undefined ? req.body.pdf_name : '';
     const category = req.body.category !== undefined ? req.body.category : 'News';
     const is_active = req.body.is_active !== undefined ? (req.body.is_active ? 1 : 0) : 1;
     const sort_order = req.body.sort_order !== undefined ? req.body.sort_order : 0;
@@ -2455,9 +2457,9 @@ router.post('/blog', async (req, res) => {
     const slug = await uniqueBlogSlug(slugifyTitle(req.body.slug || title));
 
     const [result] = await pool.execute(
-      `INSERT INTO blog_posts (title, slug, excerpt, body, image_url, category, published_at, is_active, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [title, slug, excerpt, body, image_url, category, published_at, is_active, sort_order]
+      `INSERT INTO blog_posts (title, slug, excerpt, body, image_url, pdf_url, pdf_name, category, published_at, is_active, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [title, slug, excerpt, body, image_url, pdf_url, pdf_name, category, published_at, is_active, sort_order]
     );
 
     const [rows] = await pool.execute('SELECT * FROM blog_posts WHERE id = ?', [result.insertId]);
@@ -2481,6 +2483,8 @@ router.put('/blog/:id', async (req, res) => {
     const excerpt = req.body.excerpt !== undefined ? req.body.excerpt : ex.excerpt;
     const body = req.body.body !== undefined ? req.body.body : ex.body;
     const image_url = req.body.image_url !== undefined ? req.body.image_url : ex.image_url;
+    const pdf_url = req.body.pdf_url !== undefined ? req.body.pdf_url : (ex.pdf_url || '');
+    const pdf_name = req.body.pdf_name !== undefined ? req.body.pdf_name : (ex.pdf_name || '');
     const category = req.body.category !== undefined ? req.body.category : ex.category;
     const is_active = req.body.is_active !== undefined ? (req.body.is_active ? 1 : 0) : ex.is_active;
     const sort_order = req.body.sort_order !== undefined ? req.body.sort_order : ex.sort_order;
@@ -2492,8 +2496,8 @@ router.put('/blog/:id', async (req, res) => {
 
     await pool.execute(
       `UPDATE blog_posts SET title = ?, slug = ?, excerpt = ?, body = ?, image_url = ?,
-       category = ?, published_at = ?, is_active = ?, sort_order = ?, updated_at = NOW() WHERE id = ?`,
-      [title, slug, excerpt, body, image_url, category, published_at, is_active, sort_order, id]
+       pdf_url = ?, pdf_name = ?, category = ?, published_at = ?, is_active = ?, sort_order = ?, updated_at = NOW() WHERE id = ?`,
+      [title, slug, excerpt, body, image_url, pdf_url, pdf_name, category, published_at, is_active, sort_order, id]
     );
 
     const [rows] = await pool.execute('SELECT * FROM blog_posts WHERE id = ?', [id]);

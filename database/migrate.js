@@ -263,6 +263,8 @@ const tables = [
     excerpt TEXT,
     body TEXT,
     image_url VARCHAR(1000) DEFAULT '',
+    pdf_url VARCHAR(1000) DEFAULT '',
+    pdf_name VARCHAR(255) DEFAULT '',
     category VARCHAR(255) DEFAULT 'News',
     published_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     is_active TINYINT DEFAULT 1,
@@ -359,6 +361,19 @@ async function runMigrations() {
       console.log(`Table ${i + 1}/${tables.length} processed.`);
     }
     console.log('All tables created or verified.');
+
+    const columnAdds = [
+      "ALTER TABLE blog_posts ADD COLUMN pdf_url VARCHAR(1000) DEFAULT ''",
+      "ALTER TABLE blog_posts ADD COLUMN pdf_name VARCHAR(255) DEFAULT ''"
+    ];
+    for (const sql of columnAdds) {
+      try {
+        await pool.execute(sql);
+        console.log('Added column:', sql);
+      } catch (colErr) {
+        if (colErr && colErr.code !== 'ER_DUP_FIELDNAME') throw colErr;
+      }
+    }
 
     console.log('Inserting default placeholder rows...');
     for (const insert of defaultInserts) {
